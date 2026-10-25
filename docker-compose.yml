@@ -1,0 +1,12 @@
+services:
+  torrenthub:
+    image: okhao/torrenthub:latest
+    container_name: TorrentHub
+    restart: unless-stopped
+    ports:
+      - "9162:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+      - TH_VERSION=20261025j

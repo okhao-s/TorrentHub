@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090b10">
+<title>TorrentHub · 下载器总控</title>
+<link rel="icon" href="/static/favicon.svg">
+<link rel="stylesheet" href="/static/style.css?v=7">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="30" height="30">
+        <defs><linearGradient id="mk" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#7aa2ff"/><stop offset="1" stop-color="#a78bfa"/>
+        </linearGradient></defs>
+        <rect x="1.2" y="1.2" width="29.6" height="29.6" rx="9" fill="url(#mk)" opacity=".16"/>
+        <rect x="1.2" y="1.2" width="29.6" height="29.6" rx="9" fill="none" stroke="url(#mk)" stroke-opacity=".5"/>
+        <path d="M16 7.5v11" stroke="url(#mk)" stroke-width="2.4" stroke-linecap="round"/>
+        <path d="M10.8 13.6 16 18.8l5.2-5.2" fill="none" stroke="url(#mk)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M9 24.4h14" stroke="url(#mk)" stroke-opacity=".55" stroke-width="1.8" stroke-linecap="round"/>
+      </svg>
+    </span>
+    <span class="brand-text">
+      <h1>TorrentHub</h1>
+      <em>DOWNLOAD CONSOLE</em>
+    </span>
+  </div>
+
+  <div class="instances" id="instance-pills" role="tablist" aria-label="下载器实例"></div>
+
+  <div class="speedo">
+    <span class="speed down"><i>↓</i><b id="sp-dl">0</b></span>
+    <span class="speed up"><i>↑</i><b id="sp-ul">0</b></span>
+    <canvas class="spark" id="spark" width="88" height="26" title="近 24 小时上传速度"></canvas>
+    <span class="speed meta" id="sp-updated" title="数据快照时间">—</span>
+  </div>
+
+  <div class="actions">
+    <button class="btn" id="btn-add">添加任务</button>
+    <div class="menu-wrap">
+      <button class="btn ghost" id="btn-open" title="打开下载器原生界面">打开下载器 ▾</button>
+      <div class="menu" id="open-menu"></div>
+    </div>
+    <button class="btn ghost icon-only" id="btn-refresh" title="立即刷新快照（快照本身 5 秒自动刷新）">⟳</button>
+    <button class="btn ghost" id="btn-config">设置</button>
+  </div>
+</header>
+
+<main>
+  <section class="stats">
+    <div class="stat"><span>任务</span><b id="st-total">-</b></div>
+    <div class="stat clickable" data-filter="downloading"><span>下载中</span><b id="st-dl">-</b></div>
+    <div class="stat clickable" data-filter="seeding"><span>做种</span><b id="st-seed">-</b></div>
+    <div class="stat clickable" data-filter="paused"><span>暂停</span><b id="st-paused">-</b></div>
+    <div class="stat clickable alert" data-filter="error"><span>错误</span><b id="st-error" class="bad">-</b></div>
+    <div class="stat"><span>占用</span><b id="st-size">-</b></div>
+
+  </section>
+
+  <section class="disks" id="disks" aria-label="磁盘剩余空间"></section>
+
+  <section class="toolbar">
+    <div class="chips" id="state-chips">
+      <button class="chip active" data-state="">全部</button>
+      <button class="chip" data-state="downloading">下载中</button>
+      <button class="chip" data-state="seeding">做种</button>
+      <button class="chip" data-state="paused">暂停</button>
+      <button class="chip" data-state="error">错误</button>
+    </div>
+    <button class="btn ghost" id="btn-retry-errors" hidden>重试全部错误</button>
+    <input id="q" class="search" type="search" placeholder="搜索种子名称…（按 / 聚焦）">
+    <select id="sort" class="select" title="排序">
+      <option value="added:desc">最近添加</option>
+      <option value="size:desc">体积大→小</option>
+      <option value="progress:desc">进度高→低</option>
+      <option value="dl:desc">下载速度</option>
+      <option value="ul:desc">上传速度</option>
+      <option value="ratio:desc">分享率</option>
+      <option value="name:asc">名称 A→Z</option>
+    </select>
+    <span class="hint" id="page-label" style="margin-left:auto">—</span>
+  </section>
+
+  <section class="err-groups" id="err-groups" hidden></section>
+
+  <section class="table-wrap">
+    <table id="torrents">
+      <thead>
+        <tr>
+          <th class="col-check"><input type="checkbox" id="check-all" aria-label="全选"></th>
+          <th class="col-name">名称</th>
+          <th class="col-inst">实例</th>
+          <th class="col-size">大小</th>
+          <th class="col-prog">进度</th>
+          <th class="col-speed">↓ / ↑</th>
+          <th class="col-ratio">分享率</th>
+          <th class="col-state">状态</th>
+          <th class="col-act">操作</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p class="empty" id="empty">正在读取下载器…</p>
+  </section>
+  <div class="foot-pager">
+    <span class="hint" id="foot-info"></span>
+    <div class="pager">
+      <button class="btn ghost" id="btn-first">« 首页</button>
+      <button class="btn ghost" id="btn-prev2">上一页</button>
+      <span class="hint" id="page-label2">—</span>
+      <button class="btn ghost" id="btn-next2">下一页</button>
+      <button class="btn ghost" id="btn-last">末页 »</button>
+      <span class="jump">跳至 <input id="jump-page" type="number" min="1" placeholder="#"> 页</span>
+      <select id="page-size" class="page-size" title="每页条数">
+        <option value="50">50 条/页</option>
+        <option value="100">100 条/页</option>
+        <option value="200">200 条/页</option>
+      </select>
+    </div>
+  </div>
+</main>
+
+<div class="selbar" id="selbar">
+  <span>已选 <b id="sel-count">0</b> 条</span>
+  <button class="btn" id="bulk-resume">恢复</button>
+  <button class="btn ghost" id="bulk-pause">暂停</button>
+  <button class="btn ghost" id="bulk-recheck">校验</button>
+  <label class="mini-check" title="勾选后删除会连同已下载文件一起删掉">
+    <input type="checkbox" id="del-files"> 连文件
+  </label>
+  <button class="btn ghost" id="bulk-meta">分类 / 标签</button>
+  <button class="btn danger" id="bulk-delete">删除</button>
+  <button class="btn ghost" id="bulk-clear">取消</button>
+</div>
+
+<div class="modal" id="add-modal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h2>添加下载任务</h2>
+      <button class="icon-btn" id="btn-x-add" aria-label="关闭">✕</button>
+    </div>
+    <label>目标下载器
+      <select id="add-instance"></select>
+      <span class="hint" id="add-route-hint"></span>
+    </label>
+    <label>磁力链接 / 下载地址（每行一个）
+      <textarea id="add-urls" rows="4" placeholder="magnet:?xt=urn:btih:...&#10;https://example.com/file.torrent"></textarea>
+    </label>
+    <label>或上传 .torrent 文件</label>
+    <div class="file-pick">
+      <input id="add-file" type="file" accept=".torrent" multiple hidden>
+      <label for="add-file" class="btn ghost">选择种子文件</label>
+      <span class="hint" id="add-file-names">未选择文件</span>
+    </div>
+    <div class="row2">
+      <label>保存路径（留空用默认）<input id="add-savepath" placeholder="/vol2/1000/下载"></label>
+      <label>分类 / 标签<input id="add-labels" placeholder="电影, 中文字幕"></label>
+    </div>
+    <label class="check-line">
+      <input id="add-paused" type="checkbox">
+      <span>添加后先暂停（不立即开始下载）</span>
+    </label>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btn-add-dry">仅校验</button>
+      <button class="btn" id="btn-add-submit">开始下载</button>
+    </div>
+    <p class="hint" id="add-hint"></p>
+  </div>
+</div>
+
+<div class="modal" id="config-modal">
+  <div class="modal-box wide">
+    <div class="modal-head">
+      <h2>设置</h2>
+      <button class="icon-btn" id="btn-x-config" aria-label="关闭">✕</button>
+    </div>
+    <div class="tabs" id="cfg-tabs">
+      <button class="tab active" data-tab="inst">实例</button>
+      <button class="tab" data-tab="limit">限速</button>
+      <button class="tab" data-tab="rules">规则</button>
+      <button class="tab" data-tab="log">日志</button>
+    </div>
+
+    <div class="tabpane active" data-pane="inst">
+    <div class="inst-list" id="inst-list"></div>
+    <h3 class="sub">编辑 / 新增实例</h3>
+    <div class="inst-form">
+      <div class="row2">
+        <label>名称<input id="f-name" placeholder="qb1"></label>
+        <label>类型
+          <select id="f-kind">
+            <option value="qb">qBittorrent</option>
+            <option value="tr">Transmission</option>
+          </select>
+        </label>
+      </div>
+      <label>地址<input id="f-url" placeholder="http://192.168.1.10:8080"></label>
+      <label>原生界面地址（留空自动推导）<input id="f-webui" placeholder="http://192.168.1.10:8080"></label>
+      <div class="row2">
+        <label>用户名<input id="f-user" placeholder="admin"></label>
+        <label>密码<input id="f-pass" type="password" placeholder="留空表示不修改"></label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="btn-test">测试连接</button>
+        <button class="btn" id="btn-save-inst">保存实例</button>
+      </div>
+      <p class="hint" id="inst-hint"></p>
+    </div>
+    <div class="auth-box">
+      <div class="auth-head"><span>访问密码</span><em id="pwd-state">未设置</em></div>
+      <div class="row2">
+        <label>新密码<input id="f-pwd" type="password" placeholder="留空=不修改"></label>
+        <label>&nbsp;<button class="btn ghost" id="btn-save-pwd">保存密码</button></label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="btn-clear-pwd">清除密码</button>
+      </div>
+    </div>
+    </div><!-- /inst pane -->
+
+    <div class="tabpane" data-pane="limit">
+      <p class="hint">填 0 表示不限速。单位 KB/s，只影响该下载器全局。</p>
+      <div id="limit-list"></div>
+    </div>
+
+    <div class="tabpane" data-pane="rules">
+      <p class="hint">添加任务时选「自动」会按顺序匹配种子名称（正则，忽略大小写），命中就用对应实例和路径。</p>
+      <div id="rules-list"></div>
+      <div class="rule-form">
+        <input id="rule-match" placeholder="匹配规则，如 2160p|4k|uhd">
+        <select id="rule-inst"></select>
+        <input id="rule-path" placeholder="保存路径（可空）">
+        <input id="rule-cat" placeholder="分类（可空）">
+        <button class="btn ghost" id="btn-rule-add">添加规则</button>
+      </div>
+    </div>
+
+    <div class="tabpane" data-pane="log">
+      <div class="log-head">
+        <span class="hint" id="log-hint">最近 100 条操作</span>
+        <button class="btn ghost" id="btn-log-refresh">刷新</button>
+      </div>
+      <div class="log-list" id="log-list"></div>
+    </div>
+  </div>
+</div>
+
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h3 id="dr-name">详情</h3>
+    <button class="icon-btn" id="btn-x-drawer" aria-label="关闭">✕</button>
+  </div>
+  <div class="drawer-body" id="dr-body"></div>
+</aside>
+<div class="drawer-mask" id="drawer-mask"></div>
+
+<div class="modal" id="bulk-modal">
+  <div class="modal-box narrow">
+    <div class="modal-head">
+      <h2>批量修改分类 / 标签</h2>
+      <button class="icon-btn" id="btn-x-bulk" aria-label="关闭">✕</button>
+    </div>
+    <label>分类（qBittorrent，留空不改）<input id="bulk-category" placeholder="电影"></label>
+    <div class="row2">
+      <label>添加标签<input id="bulk-add-labels" placeholder="已整理, 中文字幕"></label>
+      <label>移除标签<input id="bulk-del-labels" placeholder="待整理"></label>
+    </div>
+    <p class="hint">TR 没有分类概念，分类会作为标签添加。</p>
+    <div class="modal-actions">
+      <button class="btn ghost" id="btn-x-bulk2">取消</button>
+      <button class="btn" id="btn-bulk-apply">应用</button>
+    </div>
+    <p class="hint" id="bulk-hint"></p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<script src="/static/app.js?v=7"></script>
+</body>
+</html>
